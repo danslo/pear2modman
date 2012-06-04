@@ -34,5 +34,5 @@ tar -xzf $PACKAGE_PATH -C $CONVERT_PATH
 
 # Convert to modman. 
 echo "Converting..."
-php -f dl.php $CONVERT_PATH
+php -f pear2modman.php $CONVERT_PATH
 
