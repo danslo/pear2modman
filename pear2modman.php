@@ -121,17 +121,20 @@ class ModmanGenerator
          * Get package code path.
          */
         $namespaceNode = $target->children()->dir;
-        $originalCodePath = sprintf('app/code/%s/%s/%s',
+        $originalCodePath = sprintf(
+            'app/code/%s/%s/%s',
             $codePool,
             (string)$namespaceNode->attributes()->name,
-            (string)$namespaceNode->children()->dir->attributes()->name);
+            (string)$namespaceNode->children()->dir->attributes()->name
+        );
 
         /**
          * Copy it to modman target.
          */
         $this->_copyFolder(
             $this->_getPackageDirectory() . '/' . $originalCodePath,
-            $this->_getModmanDirectory() . '/code');
+            $this->_getModmanDirectory() . '/code'
+        );
 
         /**
          * Write entry in modman index file.
@@ -149,7 +152,27 @@ class ModmanGenerator
      */
     protected function _handleEtcTarget($target)
     {
-        // STUB
+        /**
+         * Get path to our bootstrap file.
+         */
+        $bootstrapPath = sprintf(
+            'app/etc/modules/%s',
+            (string)$target->children()->dir->file->attributes()->name
+        );
+
+        /**
+         * Copy it to modman target.
+         */
+        copy(
+            $this->_getPackageDirectory() . '/' . $bootstrapPath,
+            $this->_getModmanDirectory()  . '/' . 'bootstrap.xml'
+        );
+
+        /**
+         *Write entry in modman index file.
+         */
+        $this->_writeModmanLine('bootstrap.xml', $bootstrapPath);
+
         return $this;
     }
 
