@@ -189,6 +189,18 @@ class ModmanGenerator
     }
 
     /**
+     * Converts skin files to modman.
+     *
+     * @param SimpleXMLElement $target
+     * @return \ModmanGenerator
+     */
+    protected function _handleSkinTarget($target)
+    {
+        // STUB
+        return $this;
+    }
+
+    /**
      * Starts the conversion of a specified PEAR package.
      *
      * @return \ModmanGenerator
@@ -208,6 +220,9 @@ class ModmanGenerator
                     break;
                 case 'magedesign':
                     $this->_handleDesignTarget($target);
+                    break;
+                case 'mageskin':
+                    $this->_handleSkinTarget($target);
                     break;
                 default:
                     throw new Exception(sprintf('Unhandle content target: %s', $targetType));
