@@ -115,13 +115,14 @@ class ModmanGenerator
      * @param SimpleXMLElement $target
      * @return \ModmanGenerator
      */
-    protected function _handleLocalTarget($target)
+    protected function _handleCodeTarget($target, $codePool)
     {
         /**
          * Get package code path.
          */
         $namespaceNode = $target->children()->dir;
-        $originalCodePath = sprintf('app/code/local/%s/%s',
+        $originalCodePath = sprintf('app/code/%s/%s/%s',
+            $codePool,
             (string)$namespaceNode->attributes()->name,
             (string)$namespaceNode->children()->dir->attributes()->name);
 
@@ -175,8 +176,9 @@ class ModmanGenerator
         foreach ($this->_getPackageContents() as $target) {
             $targetType = (string)$target->attributes()->name;
             switch($targetType) {
+                case 'magecommunity':
                 case 'magelocal':
-                    $this->_handleLocalTarget($target);
+                    $this->_handleCodeTarget($target, str_replace('mage', '', $targetType));
                     break;
                 case 'mageetc':
                     $this->_handleEtcTarget($target);
