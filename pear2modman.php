@@ -224,6 +224,12 @@ class ModmanGenerator
                 case 'mageskin':
                     $this->_handleSkinTarget($target);
                     break;
+                case 'mage':
+                    /**
+                     * TODO: Implement directory-based handlers.
+                     */
+                    break;
+
                 default:
                     throw new Exception(sprintf('Unhandle content target: %s', $targetType));
             }
