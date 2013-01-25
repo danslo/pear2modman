@@ -176,6 +176,9 @@ class ModmanGenerator
         $path = '';
         do {
             $current = $current->children()->dir;
+            if (!$current) {
+                return false;
+            }
             $path .= $this->_getNodeName($current) . DS;
             $currentLevel++;
         } while ($currentLevel != $fromLevel);
@@ -194,52 +197,54 @@ class ModmanGenerator
 
             // Go through the different types of files (layout, template).
             $types = $this->_getDirectoriesFromNode($area, 2);
-            foreach ($types['directories'] as $type) {
-                $typeName = $this->_getNodeName($type);
+            if ($types) {
+                foreach ($types['directories'] as $type) {
+                    $typeName = $this->_getNodeName($type);
 
-                // Determine modman directories.
-                $originDirectory = sprintf('%s/%s/%s', $themeType, $areaName, $typeName);
-                $targetDirectory = '';
-                switch ($areaName) {
-                    case 'adminhtml':
-                        $targetDirectory = sprintf('%s/%s/default/default/%s', $themeFolder, $areaName, $typeName);
-                        break;
-                    case 'frontend':
-                        $targetDirectory = sprintf('%s/%s/base/default/%s', $themeFolder, $areaName, $typeName);
-                        break;
-                    default:
-                        throw new Exception(sprintf('Unhandled design area: %s', $areaName));
-                }
+                    // Determine modman directories.
+                    $originDirectory = sprintf('%s/%s/%s', $themeType, $areaName, $typeName);
+                    $targetDirectory = '';
+                    switch ($areaName) {
+                        case 'adminhtml':
+                            $targetDirectory = sprintf('%s/%s/default/default/%s', $themeFolder, $areaName, $typeName);
+                            break;
+                        case 'frontend':
+                            $targetDirectory = sprintf('%s/%s/base/default/%s', $themeFolder, $areaName, $typeName);
+                            break;
+                        default:
+                            throw new Exception(sprintf('Unhandled design area: %s', $areaName));
+                    }
 
-                // Do the copying.
-                @mkdir(sprintf('%s/%s/%s', $this->_getModmanDirectory(), $themeType, $areaName), 0755, true);
-                $absoluteOriginDirectory = sprintf('%s/%s', $this->_getModmanDirectory(), $originDirectory);
-                $absoluteTargetDirectory = sprintf('%s/%s/%s/%s/%s', $this->_getPackageDirectory(), $themeFolder, $areaName, $types['path'], $typeName);
-                $this->_copyFolder($absoluteTargetDirectory, $absoluteOriginDirectory);
+                    // Do the copying.
+                    @mkdir(sprintf('%s/%s/%s', $this->_getModmanDirectory(), $themeType, $areaName), 0755, true);
+                    $absoluteOriginDirectory = sprintf('%s/%s', $this->_getModmanDirectory(), $originDirectory);
+                    $absoluteTargetDirectory = sprintf('%s/%s/%s/%s/%s', $this->_getPackageDirectory(), $themeFolder, $areaName, $types['path'], $typeName);
+                    $this->_copyFolder($absoluteTargetDirectory, $absoluteOriginDirectory);
 
-                // Write modman lines.
-                switch ($themeType) {
-                    case 'skin':
-                        $this->_writeModmanLine($originDirectory, $targetDirectory);
-                        break;
+                    // Write modman lines.
+                    switch ($themeType) {
+                        case 'skin':
+                            $this->_writeModmanLine($originDirectory, $targetDirectory);
+                            break;
 
-                    case 'design':
-                        switch ($typeName) {
-                            // These can be applied with a wildcard.
-                            case 'layout':
-                                $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory . DS);
-                                break;
-                            // But these might exist in core files, so we must individually apply them.
-                            case 'locale':
-                            case 'template':
-                                foreach ($this->_getFiles($type) as $file) {
-                                    $this->_writeModmanLine(sprintf('%s/%s', $originDirectory, $file), sprintf('%s/%s', $targetDirectory, $file));
-                                }
-                                break;
-                            default:
-                                throw new Exception(sprintf('Unhandled design file type: %s', $typeName));
-                        }
-                        break;
+                        case 'design':
+                            switch ($typeName) {
+                                // These can be applied with a wildcard.
+                                case 'layout':
+                                    $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory . DS);
+                                    break;
+                                // But these might exist in core files, so we must individually apply them.
+                                case 'locale':
+                                case 'template':
+                                    foreach ($this->_getFiles($type) as $file) {
+                                        $this->_writeModmanLine(sprintf('%s/%s', $originDirectory, $file), sprintf('%s/%s', $targetDirectory, $file));
+                                    }
+                                    break;
+                                default:
+                                    throw new Exception(sprintf('Unhandled design file type: %s', $typeName));
+                            }
+                            break;
+                    }
                 }
             }
         }
