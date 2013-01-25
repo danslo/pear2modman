@@ -370,9 +370,11 @@ class ModmanGenerator
         // We just copy every rootfolder recursively into the modman directory.
         foreach ($target->dir as $dir) {
             $rootDirectory = $this->_getNodeName($dir);
+            $destDirectory = sprintf('%s/%s/', $this->_getModmanDirectory(),  $rootDirectory);
+            @mkdir($destDirectory, 0755, true);
             $this->_copyFolder(
                 sprintf('%s/%s/*', $this->_getPackageDirectory(), $rootDirectory),
-                sprintf('%s/%s/',  $this->_getModmanDirectory(),  $rootDirectory)
+                $destDirectory
             );
         }
 
