@@ -245,7 +245,7 @@ class ModmanGenerator
      */
     protected function _handleDesignTarget($target)
     {
-        //$this->_handleThemeTarget($target, 'design', 'app/design');
+        $this->_handleThemeTarget($target, 'design', 'app/design');
         return $this;
     }
 
