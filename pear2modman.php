@@ -225,10 +225,16 @@ class ModmanGenerator
 
                     case 'design':
                         switch ($typeName) {
-                            case 'locale':
+                            // These can be applied with a wildcard.
                             case 'layout':
-                            case 'template':
                                 $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory . DS);
+                                break;
+                            // But these might exist in core files, so we must individually apply them.
+                            case 'locale':
+                            case 'template':
+                                foreach ($this->_getFiles($type) as $file) {
+                                    $this->_writeModmanLine(sprintf('%s/%s', $originDirectory, $file), sprintf('%s/%s', $targetDirectory, $file));
+                                }
                                 break;
                             default:
                                 throw new Exception(sprintf('Unhandled design file type: %s', $typeName));
@@ -330,6 +336,56 @@ class ModmanGenerator
     }
 
     /**
+     * Recursively gets all files in a directory node.
+     *
+     * @staticvar array $files
+     * @param SimpleXMLElement $target
+     * @param string $path
+     * @return array
+     */
+    protected function _getFiles($target, $path = '', &$files = array())
+    {
+        if ($target->dir) {
+            foreach ($target->dir as $dir) {
+                $path .= $this->_getNodeName($dir) . DS;
+                if ($dir->file) {
+                    foreach ($dir->file as $file) {
+                        $files[] = $path . $this->_getNodeName($file);
+                    }
+                }
+                $this->_getFiles($dir, $path, $files);
+            }
+        }
+        return $files;
+    }
+
+    /**
+     * Converts mage files to modman.
+     *
+     * @param SimpleXMLElement $target
+     * @return \ModmanGenerator
+     */
+    protected function _handleMageTarget($target)
+    {
+        // We just copy every rootfolder recursively into the modman directory.
+        foreach ($target->dir as $dir) {
+            $rootDirectory = $this->_getNodeName($dir);
+            $this->_copyFolder(
+                sprintf('%s/%s/*', $this->_getPackageDirectory(), $rootDirectory),
+                sprintf('%s/%s/',  $this->_getModmanDirectory(),  $rootDirectory)
+            );
+        }
+
+        // But when applying symlinks we must be careful. Therefore we only apply them
+        // on the deepest level (the actual files).
+        $files = $this->_getFiles($target);
+        foreach ($files as $file) {
+            $this->_writeModmanLine($file, $file);
+        }
+        return $this;
+    }
+
+    /**
      * Starts the conversion of a specified PEAR package.
      *
      * @return \ModmanGenerator
@@ -339,18 +395,22 @@ class ModmanGenerator
     {
         foreach ($this->_getPackageContents() as $target) {
             $targetType = str_replace('mage', '', $this->_getNodeName($target));
-            switch($targetType) {
-                case 'community':
-                case 'local':
-                    $this->_handleCodeTarget($target, $targetType);
-                    break;
-                default:
-                    $method = sprintf('_handle%sTarget', ucfirst($targetType));
-                    if (method_exists($this, $method)) {
-                        $this->{$method}($target);
-                    } else {
-                        throw new Exception(sprintf('Unhandled content target: %s', $this->_getNodeName($target)));
-                    }
+            if (empty($targetType)) {
+                $this->_handleMageTarget($target);
+            } else {
+                switch($targetType) {
+                    case 'community':
+                    case 'local':
+                        $this->_handleCodeTarget($target, $targetType);
+                        break;
+                    default:
+                        $method = sprintf('_handle%sTarget', ucfirst($targetType));
+                        if (method_exists($this, $method)) {
+                            $this->{$method}($target);
+                        } else {
+                            throw new Exception(sprintf('Unhandled content target: %s', $this->_getNodeName($target)));
+                        }
+                }
             }
         }
         return $this;
@@ -358,7 +418,7 @@ class ModmanGenerator
 
 }
 
-$generator = new ModmanGenerator($argv[1]);
+$generator = new ModmanGenerator(isset($argv[1]) ? $argv[1] : $_GET['module']);
 try {
     $generator->start();
     printf('Done!' . PHP_EOL);
