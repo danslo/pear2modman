@@ -1,5 +1,7 @@
 <?php
 
+define('DS', DIRECTORY_SEPARATOR);
+
 class ModmanGenerator
 {
 
@@ -27,7 +29,7 @@ class ModmanGenerator
     protected function _getPackageContents()
     {
         if ($this->_packageContents === null) {
-            $packageFile = $this->_packageDirectory . '/package.xml';
+            $packageFile = $this->_packageDirectory . DS . 'package.xml';
             if (!file_exists($packageFile)) {
                 throw new Exception('Could not find package file: ' . $packageFile);
             }
@@ -63,7 +65,7 @@ class ModmanGenerator
     protected function _getModmanDirectory()
     {
         if (empty($this->_modmanDirectory)) {
-            $this->_modmanDirectory = $this->_packageDirectory . '/modman';
+            $this->_modmanDirectory = $this->_packageDirectory . DS . 'modman';
             @mkdir($this->_modmanDirectory, 0755, true);
             if (!file_exists($this->_modmanDirectory)) {
                 throw new Exception('Output modman directory does not exist.');
@@ -79,7 +81,7 @@ class ModmanGenerator
      */
     protected function _getModmanFile()
     {
-        return $this->_getModmanDirectory() . '/modman';
+        return $this->_getModmanDirectory() . DS . 'modman';
     }
 
     /**
@@ -103,9 +105,7 @@ class ModmanGenerator
      */
     protected function _copyFolder($from, $to)
     {
-        /**
-         * TODO: Replace with some recursive copy() implementation.
-         */
+        // TODO: Replace with some recursive copy() implementation.
         return shell_exec(sprintf('cp -Rf %s %s', $from, $to));
     }
 
@@ -117,30 +117,22 @@ class ModmanGenerator
      */
     protected function _handleCodeTarget($target, $codePool)
     {
-        /**
-         * Get package code path.
-         */
-        $namespaceNode = $target->children()->dir;
-        $originalCodePath = sprintf(
-            'app/code/%s/%s/%s',
-            $codePool,
-            (string)$namespaceNode->attributes()->name,
-            (string)$namespaceNode->children()->dir->attributes()->name
-        );
+        // Skip the namespace.
+        $code = $this->_getDirectoriesFromNode($target, 1);
 
-        /**
-         * Copy it to modman target.
-         */
-        $this->_copyFolder(
-            $this->_getPackageDirectory() . '/' . $originalCodePath,
-            $this->_getModmanDirectory() . '/code'
-        );
+        // Copy all modules.
+        $codePath = sprintf('app/code/%s/%s', $codePool, $code['path']);
+        $this->_copyFolder(sprintf('%s/%s', $this->_getPackageDirectory(), $codePath), sprintf('%s/code', $this->_getModmanDirectory()));
 
-        /**
-         * Write entry in modman index file.
-         */
-        $this->_writeModmanLine('code', $originalCodePath);
+        // Write modman lines.
+        foreach ($code['directories'] as $directory) {
+            // Get package code path.
+            $moduleName = $this->_getNodeName($directory);
+            $modulePath = sprintf('%s/%s', $codePath, $moduleName);
 
+            // Write entry in modman index file.
+            $this->_writeModmanLine(sprintf('code/%s', $moduleName), $modulePath);
+        }
         return $this;
     }
 
@@ -152,27 +144,96 @@ class ModmanGenerator
      */
     protected function _handleEtcTarget($target)
     {
-        /**
-         * Get path to our bootstrap file.
-         */
-        $bootstrapPath = sprintf(
-            'app/etc/modules/%s',
-            (string)$target->children()->dir->file->attributes()->name
+        foreach ($target->dir->file as $bootstrap) {
+            // Get name of bootstrap file.
+            $bootstrapFile = $this->_getNodeName($bootstrap);
+
+            // Get path to our bootstrap file.
+            $bootstrapPath = sprintf('app/etc/modules/%s', $bootstrapFile);
+
+            // Copy it to modman target.
+            copy(sprintf('%s/%s', $this->_getPackageDirectory(), $bootstrapPath), sprintf('%s/%s', $this->_getModmanDirectory(), $bootstrapFile));
+
+            $this->_writeModmanLine($bootstrapFile, $bootstrapPath);
+        }
+        return $this;
+    }
+
+    /**
+     * Extracts all directories inside a directory $fromLevel deep.
+     * Also records the path it took while going there.
+     *
+     * @param SimpleXMLElement $node
+     * @param int $maxLevel
+     * @return string
+     */
+    protected function _getDirectoriesFromNode($node, $fromLevel = 0)
+    {
+        $current = $node;
+        $currentLevel = 0;
+        $path = '';
+        do {
+            $current = $current->children()->dir;
+            $path .= $this->_getNodeName($current) . DS;
+            $currentLevel++;
+        } while ($currentLevel != $fromLevel);
+
+        return array(
+            'directories' => $current->children(),
+            'path'        => rtrim($path, DS)
         );
+    }
 
-        /**
-         * Copy it to modman target.
-         */
-        copy(
-            $this->_getPackageDirectory() . '/' . $bootstrapPath,
-            $this->_getModmanDirectory()  . '/' . 'bootstrap.xml'
-        );
+    protected function _handleThemeTarget($target, $themeType, $themeFolder)
+    {
+        // Go through the different areas.
+        foreach ($target->dir as $area) {
+            $areaName = $this->_getNodeName($area);
 
-        /**
-         *Write entry in modman index file.
-         */
-        $this->_writeModmanLine('bootstrap.xml', $bootstrapPath);
+            // Go through the different types of files (layout, template).
+            $types = $this->_getDirectoriesFromNode($area, 2);
+            foreach ($types['directories'] as $type) {
+                $typeName = $this->_getNodeName($type);
 
+                // Determine modman directories.
+                $originDirectory = sprintf('%s/%s/%s', $themeType, $areaName, $typeName);
+                $targetDirectory = '';
+                switch ($areaName) {
+                    case 'adminhtml':
+                        $targetDirectory = sprintf('%s/%s/default/default/%s', $themeFolder, $areaName, $typeName);
+                        break;
+                    case 'frontend':
+                        $targetDirectory = sprintf('%s/%s/base/default/%s', $themeFolder, $areaName, $typeName);
+                        break;
+                    default:
+                        throw new Exception(sprintf('Unhandled design area: %s', $areaName));
+                }
+
+                // Do the copying.
+                @mkdir(sprintf('%s/%s/%s', $this->_getModmanDirectory(), $themeType, $areaName), 0755, true);
+                $absoluteOriginDirectory = sprintf('%s/%s', $this->_getModmanDirectory(), $originDirectory);
+                $absoluteTargetDirectory = sprintf('%s/%s/%s/%s/%s', $this->_getPackageDirectory(), $themeFolder, $areaName, $types['path'], $typeName);
+                $this->_copyFolder($absoluteTargetDirectory, $absoluteOriginDirectory);
+
+                // Write modman lines.
+                switch ($themeType) {
+                    case 'skin':
+                        $this->_writeModmanLine($originDirectory, $targetDirectory);
+                        break;
+
+                    case 'design':
+                        switch ($typeName) {
+                            case 'layout':
+                            case 'template':
+                                $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory);
+                                break;
+                            default:
+                                throw new Exception(sprintf('Unhandled design file type: %s', $typeName));
+                        }
+                        break;
+                }
+            }
+        }
         return $this;
     }
 
@@ -184,8 +245,19 @@ class ModmanGenerator
      */
     protected function _handleDesignTarget($target)
     {
-        // STUB
+        //$this->_handleThemeTarget($target, 'design', 'app/design');
         return $this;
+    }
+
+    /**
+     * Gets the name attribute of a simple XML node.
+     *
+     * @param SimpleXMLElement $node
+     * @return string
+     */
+    protected function _getNodeName($node)
+    {
+        return (string)$node->attributes()->name;
     }
 
     /**
@@ -196,7 +268,61 @@ class ModmanGenerator
      */
     protected function _handleSkinTarget($target)
     {
-        // STUB
+        $this->_handleThemeTarget($target, 'skin', 'skin');
+        return $this;
+    }
+
+    /**
+     * Converts locale files to modman.
+     *
+     * @param SimpleXMLElement $target
+     * @return \ModmanGenerator
+     */
+    protected function _handleLocaleTarget($target)
+    {
+        // Copy the whole locale folder.
+        $this->_copyFolder($this->_getPackageDirectory() . DS . 'app/locale', $this->_getModmanDirectory()  . DS . 'locale');
+
+        // Go through all locales and write modman lines.
+        foreach ($target->dir as $dir) {
+            $locale = $this->_getNodeName($dir);
+            $this->_writeModmanLine(sprintf('locale/%s/*', $locale), sprintf('app/locale/%s/', $locale));
+        }
+        return $this;
+    }
+
+    /**
+     * Converts objects in magento root to modman.
+     *
+     * @param SimpleXMLElement $target
+     * @return \ModmanGenerator
+     */
+    protected function _handleWebTarget($target)
+    {
+        foreach ($target as $web) {
+            $webName = $this->_getNodeName($web);
+            switch ($webName) {
+                case 'js':
+                    $this->_copyFolder(sprintf('%s/js', $this->_getPackageDirectory()), sprintf('%s/js', $this->_getModmanDirectory()));
+                    $this->_writeModmanLine('js/*', 'js/');
+                    break;
+                default:
+                    throw new Exception(sprintf('Unhandled web target: %s', $webName));
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * Converts libraries to modman.
+     *
+     * @param SimpleXMLElement $target
+     * @return \ModmanGenerator
+     */
+    protected function _handleLibTarget($target)
+    {
+        $this->_copyFolder(sprintf('%s/lib', $this->_getPackageDirectory()), sprintf('%s/lib', $this->_getModmanDirectory()));
+        $this->_writeModmanLine('lib/*', 'lib/');
         return $this;
     }
 
@@ -209,29 +335,19 @@ class ModmanGenerator
     public function start()
     {
         foreach ($this->_getPackageContents() as $target) {
-            $targetType = (string)$target->attributes()->name;
+            $targetType = str_replace('mage', '', $this->_getNodeName($target));
             switch($targetType) {
-                case 'magecommunity':
-                case 'magelocal':
-                    $this->_handleCodeTarget($target, str_replace('mage', '', $targetType));
+                case 'community':
+                case 'local':
+                    $this->_handleCodeTarget($target, $targetType);
                     break;
-                case 'mageetc':
-                    $this->_handleEtcTarget($target);
-                    break;
-                case 'magedesign':
-                    $this->_handleDesignTarget($target);
-                    break;
-                case 'mageskin':
-                    $this->_handleSkinTarget($target);
-                    break;
-                case 'mage':
-                    /**
-                     * TODO: Implement directory-based handlers.
-                     */
-                    break;
-
                 default:
-                    throw new Exception(sprintf('Unhandle content target: %s', $targetType));
+                    $method = sprintf('_handle%sTarget', ucfirst($targetType));
+                    if (method_exists($this, $method)) {
+                        $this->{$method}($target);
+                    } else {
+                        throw new Exception(sprintf('Unhandled content target: %s', $this->_getNodeName($target)));
+                    }
             }
         }
         return $this;
@@ -242,6 +358,7 @@ class ModmanGenerator
 $generator = new ModmanGenerator($argv[1]);
 try {
     $generator->start();
+    printf('Done!' . PHP_EOL);
 } catch (Exception $e) {
     printf('Generator failed: %s' . PHP_EOL, $e->getMessage());
 }

@@ -1,5 +1,4 @@
 MAGE_PATH="./mage"
-CONVERT_PATH="convert/$1"
 
 # Check for command line arguments.
 if test -z "$1"
@@ -15,12 +14,17 @@ then
     exit 0
 fi
 
+# Strip connect 1.0 prefix.
+PACKAGE_NAME=$(echo $1 | sed -e 's/magento-community\///')
+CONVERT_PATH="convert/$PACKAGE_NAME"
+
 # Delete temporary files.
+echo "Deleting temporary files..."
 rm -rf $CONVERT_PATH && mkdir -p $CONVERT_PATH
 
 # Download and extract extension. 
-echo "Downloading $1..."
-PACKAGE_PATH=$(echo $($MAGE_PATH download community $1) | awk '{ print $3 }')
+echo "Downloading $PACKAGE_NAME..."
+PACKAGE_PATH=$(echo $($MAGE_PATH download community $PACKAGE_NAME) | awk '{ print $3 }')
 
 # Check for existence of downloaded package.
 if [ "$PACKAGE_PATH" = "Package" ]
@@ -28,8 +32,17 @@ then
     echo "Could not find package - invalid key specified?"
     rm -rf $CONVERT_PATH
     exit 0
+# Check if we were even initialized.
+elif [ "$PACKAGE_PATH" = "Channel" ]
+then
+    echo "Could not find community channel, initializing mage and restarting."
+    $MAGE_PATH mage-setup
+    ./$0 $PACKAGE_NAME
+    exit 0
 fi
-echo "Extracting package to $CONVERT_PATH."
+
+# Extract package.
+echo "Extracting $PACKAGE_PATH to $CONVERT_PATH."
 tar -xzf $PACKAGE_PATH -C $CONVERT_PATH
 
 # Convert to modman. 
