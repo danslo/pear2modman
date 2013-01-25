@@ -31,12 +31,14 @@ class ModmanGenerator
         if ($this->_packageContents === null) {
             $packageFile = $this->_packageDirectory . DS . 'package.xml';
             if (!file_exists($packageFile)) {
-                throw new Exception('Could not find package file: ' . $packageFile);
+                throw new Exception(sprintf('Could not find package file: %s', $packageFile));
             }
 
-            $xml = simplexml_load_file($packageFile);
+            $xml = @simplexml_load_file($packageFile);
             if ($xml) {
                 $this->_packageContents = current($xml->xpath('/package/contents'));
+            } else {
+                throw new Exception('Errors in package.xml, aborting.');
             }
         }
         return $this->_packageContents;
@@ -223,9 +225,10 @@ class ModmanGenerator
 
                     case 'design':
                         switch ($typeName) {
+                            case 'locale':
                             case 'layout':
                             case 'template':
-                                $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory);
+                                $this->_writeModmanLine(sprintf('%s/*', $originDirectory), $targetDirectory . DS);
                                 break;
                             default:
                                 throw new Exception(sprintf('Unhandled design file type: %s', $typeName));
